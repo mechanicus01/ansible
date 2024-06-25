@@ -1,0 +1,75 @@
+---
+# Install Postfix and sendmail
+- name: Install Postfix and sendmail
+  yum:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - postfix
+    - opendkim
+    - opendkim-tools  # for opendkim-genkey
+  tags: install-postfix-dkim
+
+# Add postfix user to the opendkim group
+- name: Add postfix user to the opendkim group
+  command: usermod -a -G opendkim postfix
+
+# check postfix group
+- name: Check postfix group
+  command: groups postfix
+  register: postfix_group
+
+- debug:
+    var: postfix_group
+
+# Configure OpenDKIM, copy jinja2 template as block statement
+- name: Configure opendkim
+  block:
+  - name: Configure OpenDKIM
+    template:
+      src: opendkim.conf.j2
+      dest: /etc/opendkim.conf
+      owner: root
+      group: root
+      mode: 0644
+  
+  - name: Add domain to SigningTable
+    shell: |
+      echo "*@{{ domain }} {{ domain }}" | sudo tee -a /etc/opendkim/SigningTable
+    
+  - name: Add domain to KeyTable
+    shell: |
+      echo "{{ domain }} {{ domain }}:{{ selector }}:/etc/opendkim/keys/{{ domain }}/{{ selector }}.private" | sudo tee -a /etc/opendkim/KeyTable
+  
+  - name: Create the domain directory inside the keys directory
+    command: mkdir -p /etc/opendkim/keys/{{ domain }}
+
+  - name: Generate the keys
+    shell: | 
+      opendkim-genkey -b 2048 -d {{ domain }} -D /etc/opendkim/keys/{{ domain }}  -s {{ selector }} -v
+    register: dkim_keys
+
+  - debug:
+      var: dkim_keys
+  tags: configure-opendkim
+
+# Change the ownership of the keys directory
+- name: Change the ownership of the keys directory
+  command: chown -R opendkim:opendkim /etc/opendkim/keys/
+
+# get DNS file 
+- name: Fetch DKIM key from remote host
+  fetch:
+    src: "/etc/opendkim/keys/{{ domain }}/{{ selector }}.txt"
+    dest: "{{ role_path }}/files/"
+    flat: yes  # Avoid creating extra directories based on the source pat
+  tags: get-dkim-key
+
+
+print the content of the DNS TXT record
+- name: Print the content of the DNS TXT record
+  command: cat "{{ role_path }}/files/{{ selector }}.txt"
+  register: dkim_dns_record
+
+- debug:
+    var: dkim_dns_record
