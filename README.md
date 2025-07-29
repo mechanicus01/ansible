@@ -1,4 +1,4 @@
-# Ansible Email Infrastructuren with Postfix and OpenDKIM
+# Ansible Email Infrastructur with Postfix and OpenDKIM
 
 This repository contains Ansible roles for setting up and configuring email infrastructure components, specifically focused on Postfix with OpenDKIM integration for secure email delivery.
 
